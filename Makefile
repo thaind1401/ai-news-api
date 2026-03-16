@@ -7,7 +7,7 @@ API_URL ?= http://127.0.0.1:$(PORT)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install init-db bootstrap run stop restart status smoke logs
+.PHONY: help venv install init-db bootstrap run stop restart status smoke logs reingest re-enrich
 
 help:
 	@printf "\nAI Signals API - Make targets\n\n"
@@ -18,7 +18,9 @@ help:
 	@printf "5. make status     Check whether the API is listening\n"
 	@printf "6. make smoke      Call /api/v1/signals endpoint\n"
 	@printf "7. make stop       Stop the running API server\n"
-	@printf "8. make restart    Restart the API server\n\n"
+	@printf "8. make restart    Restart the API server\n"
+	@printf "9. make reingest   Trigger crawler once manually\n"
+	@printf "10. make re-enrich Trigger enrichment jobs manually\n\n"
 	@printf "Shortcut: make bootstrap  # venv + install + init-db\n\n"
 
 venv:
@@ -51,3 +53,9 @@ smoke:
 
 logs:
 	@printf "Run 'make run' in a dedicated terminal to see live server logs.\n"
+
+reingest: venv
+	$(PYTHON) -c "import asyncio; from app.ingestion.workers.pipeline import run_crawler; asyncio.run(run_crawler())"
+
+re-enrich: venv
+	$(PYTHON) -c "from app.database.db import SessionLocal; from app.services.ingestion_service import run_enrichment_jobs; db = SessionLocal(); stats = run_enrichment_jobs(db=db, pending_limit=500, failed_retry_limit=500); db.commit(); print(stats); db.close()"

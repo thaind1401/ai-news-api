@@ -84,6 +84,14 @@ Thành phần đề xuất:
 
 Ở giai đoạn hiện tại, repo của bạn đã có phần đầu của lớp này dưới dạng crawler scheduler. Về lâu dài nên tách rõ hơn thành các worker theo source.
 
+Trạng thái áp dụng hiện tại trong repo:
+- source fetcher/discovery: `app/ingestion/workers/source_discovery.py`
+- source parser: `app/ingestion/parsers/news_parser.py`
+- source worker per-source: `app/ingestion/workers/source_worker.py`
+- scheduler: `app/main.py`
+- retry handler (crawl + enrichment failed queue): `app/ingestion/workers/pipeline.py` + `app/services/ingestion_service.py`
+- crawl logger: bảng `source_fetch_runs`
+
 ## 3.3. Normalization Pipeline
 
 Đây là lớp quan trọng nhất để biến dữ liệu thô thành signal chuẩn.

@@ -1,32 +1,23 @@
 import logging
 from contextlib import asynccontextmanager
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.crawlers.crawler import run_crawler
-from app.routers import chat, signals
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-)
+from app.api.routers import chat, digests, health, internal_jobs, search, signals, users
+from app.core import configure_logging, get_app_config
+from app.ingestion.workers.pipeline import run_crawler
+from app.ingestion.scheduler import build_scheduler
+
+configure_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
+config = get_app_config()
 
-scheduler = AsyncIOScheduler(timezone="Asia/Ho_Chi_Minh")
+scheduler = build_scheduler(config)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await run_crawler()  # chạy 1 lần ngay lúc start
-    scheduler.add_job(
-        run_crawler,
-        "interval",
-        minutes=3,
-        id="signals_crawler",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
     scheduler.start()
     try:
         yield
@@ -34,8 +25,13 @@ async def lifespan(_: FastAPI):
         scheduler.shutdown(wait=False)
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(health.router)
 app.include_router(signals.router)
 app.include_router(chat.router)
+app.include_router(search.router)
+app.include_router(users.router)
+app.include_router(digests.router)
+app.include_router(internal_jobs.router)
 
 
 @app.exception_handler(HTTPException)

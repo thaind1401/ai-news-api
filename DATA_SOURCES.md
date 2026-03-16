@@ -207,6 +207,15 @@ Mỗi nguồn nên được quản lý trong source registry nội bộ với c�
 | status | active / paused / blocked |
 | owner | người phụ trách review |
 
+### Mapping ingest method -> worker handler (đang áp dụng)
+
+| ingest/discovery type | Worker handler | Ghi chú |
+| --- | --- | --- |
+| `rss` | `app/ingestion/workers/rss_worker.py` | Ưu tiên cho nguồn chính thức có feed |
+| `homepage_css` | `app/ingestion/workers/homepage_worker.py` | Dùng khi chưa có RSS/API |
+| discovery router | `app/ingestion/workers/source_discovery.py` | Route theo `discovery.type` trong source config |
+| per-source orchestration | `app/ingestion/workers/source_worker.py` | Thực thi fetch + parse + ingest + fetch-run log |
+
 ## 9. Danh sách nguồn ưu tiên khởi động MVP
 
 Nếu phải bắt đầu ngay với phạm vi nhỏ, nên bật theo thứ tự này:

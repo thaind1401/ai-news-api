@@ -3,12 +3,12 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.database.models import Company, RawItem, Signal, SignalAIEnrichment, Source, Topic
+from app.database.models import Company, RawItem, Signal, SignalAIEnrichment, Source, SourceFetchRun, Topic
 
 DEFAULT_EVENT_TYPE = "market_move"
 TITLE_SIMILARITY_THRESHOLD = 0.93
@@ -125,6 +125,41 @@ def get_or_create_source(
     return source
 
 
+def start_source_fetch_run(
+    db: Session,
+    source_id: int,
+    run_metadata: Optional[dict[str, Any]] = None,
+) -> SourceFetchRun:
+    fetch_run = SourceFetchRun(
+        source_id=source_id,
+        status="running",
+        run_metadata=run_metadata or {},
+    )
+    db.add(fetch_run)
+    db.flush()
+    return fetch_run
+
+
+def finish_source_fetch_run(
+    fetch_run: SourceFetchRun,
+    status: str,
+    items_fetched: int = 0,
+    items_created: int = 0,
+    error_message: Optional[str] = None,
+    run_metadata: Optional[dict[str, Any]] = None,
+) -> None:
+    fetch_run.status = status
+    fetch_run.finished_at = datetime.now(timezone.utc)
+    fetch_run.items_fetched = items_fetched
+    fetch_run.items_created = items_created
+    fetch_run.error_message = error_message
+    if run_metadata:
+        fetch_run.run_metadata = {
+            **(fetch_run.run_metadata or {}),
+            **run_metadata,
+        }
+
+
 def get_or_create_topic(db: Session, category: Optional[str]) -> Optional[Topic]:
     if not category or not category.strip():
         return None
@@ -230,6 +265,7 @@ def upsert_signal_from_news_detail(
     source: Source,
     source_url: str,
     news_detail: dict,
+    fetch_run_id: Optional[int] = None,
 ):
     now = datetime.now(timezone.utc)
     title = news_detail.get("title", "")
@@ -261,6 +297,7 @@ def upsert_signal_from_news_detail(
     if not raw_item:
         raw_item = RawItem(
             source_id=source.id,
+            fetch_run_id=fetch_run_id,
             source_url=source_url,
             title=title,
             published_at=published_at,
@@ -272,6 +309,7 @@ def upsert_signal_from_news_detail(
         db.flush()
         raw_created = True
     else:
+        raw_item.fetch_run_id = fetch_run_id
         raw_item.title = title
         raw_item.published_at = published_at
         raw_item.raw_payload = payload
@@ -340,6 +378,9 @@ def upsert_signal_from_news_detail(
         signal.event_type = DEFAULT_EVENT_TYPE
         signal.signal_status = "hidden"
         signal.visibility = "internal"
+        if signal.ai_enrichment:
+            signal.ai_enrichment.enrichment_status = "pending"
+            signal.ai_enrichment.error_message = None
 
     return raw_created, signal_created, False, signal_skipped_as_duplicate
 
@@ -403,11 +444,14 @@ def process_pending_signal_enrichments(db: Session, limit: int = 200) -> tuple[i
             joinedload(Signal.company),
             joinedload(Signal.ai_enrichment),
         )
+        .outerjoin(SignalAIEnrichment, SignalAIEnrichment.signal_id == Signal.id)
         .filter(
+            Signal.signal_status != "active",
+            Signal.visibility != "public",
             or_(
-                Signal.signal_status != "active",
-                Signal.visibility != "public",
-            )
+                SignalAIEnrichment.id.is_(None),
+                SignalAIEnrichment.enrichment_status == "pending",
+            ),
         )
         .order_by(desc(Signal.crawl_time), desc(Signal.id))
         .limit(limit)
@@ -441,3 +485,59 @@ def process_pending_signal_enrichments(db: Session, limit: int = 200) -> tuple[i
             failed_count += 1
 
     return enriched_count, failed_count
+
+
+def retry_failed_signal_enrichments(db: Session, limit: int = 100) -> tuple[int, int]:
+    failed_rows = (
+        db.query(SignalAIEnrichment)
+        .options(
+            joinedload(SignalAIEnrichment.signal).joinedload(Signal.raw_item),
+            joinedload(SignalAIEnrichment.signal).joinedload(Signal.company),
+        )
+        .filter(SignalAIEnrichment.enrichment_status == "failed")
+        .order_by(SignalAIEnrichment.updated_at.asc(), SignalAIEnrichment.id.asc())
+        .limit(limit)
+        .all()
+    )
+
+    retried_success = 0
+    retried_failed = 0
+
+    for enrichment in failed_rows:
+        signal = enrichment.signal
+        if not signal:
+            enrichment.error_message = "Signal not found for failed enrichment record."
+            retried_failed += 1
+            continue
+
+        payload = (signal.raw_item.raw_payload if signal.raw_item else None) or {}
+        enrichment.enrichment_status = "pending"
+        enrichment.error_message = None
+
+        try:
+            _upsert_rule_based_enrichment(db=db, signal=signal, payload=payload)
+            retried_success += 1
+        except Exception as exc:
+            enrichment.enrichment_status = "failed"
+            enrichment.error_message = str(exc)
+            retried_failed += 1
+
+    return retried_success, retried_failed
+
+
+def run_enrichment_jobs(
+    db: Session,
+    pending_limit: int = 200,
+    failed_retry_limit: int = 100,
+) -> dict[str, int]:
+    pending_success, pending_failed = process_pending_signal_enrichments(db=db, limit=pending_limit)
+    retry_success, retry_failed = retry_failed_signal_enrichments(db=db, limit=failed_retry_limit)
+
+    return {
+        "pending_success": pending_success,
+        "pending_failed": pending_failed,
+        "retry_success": retry_success,
+        "retry_failed": retry_failed,
+        "published_total": pending_success + retry_success,
+        "failed_total": pending_failed + retry_failed,
+    }

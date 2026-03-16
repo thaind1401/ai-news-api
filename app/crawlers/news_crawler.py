@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 import logging
 
 import httpx
@@ -26,61 +27,85 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, retries: int = 3)
             await asyncio.sleep(backoff)
 
 
-async def crawl_news(url: str) -> dict:
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=REQUEST_HEADERS) as client:
-        response = await _get_with_retry(client, url)
+def _parse_datetime(value: str | None):
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
 
-    soup = BeautifulSoup(response.content, "html.parser")
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except Exception:
+        pass
 
-    # Lấy title
-    title = soup.find("h1", class_="title-detail")
-    title = title.text.strip() if title else ""
+    try:
+        return parsedate_to_datetime(text)
+    except Exception:
+        pass
 
-    # Lấy sub_title
-    sub_title = soup.find("p", class_="description")
-    sub_title = sub_title.text.strip() if sub_title else ""
+    for fmt in [
+        "%d/%m/%Y, %H:%M (GMT+7)",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    ]:
+        try:
+            return datetime.strptime(text, fmt)
+        except Exception:
+            continue
+    return None
 
-    # Lấy image
+
+def _extract_meta(soup: BeautifulSoup, keys: list[str]) -> str:
+    lowered = {key.lower() for key in keys}
+    for tag in soup.find_all("meta"):
+        key = str(tag.get("property") or tag.get("name") or tag.get("itemprop") or "").strip().lower()
+        if key in lowered:
+            content = str(tag.get("content") or "").strip()
+            if content:
+                return content
+    return ""
+
+
+def _parse_vnexpress(soup: BeautifulSoup) -> dict:
+    title_tag = soup.find("h1", class_="title-detail")
+    title = title_tag.text.strip() if title_tag else ""
+
+    sub_title_tag = soup.find("p", class_="description")
+    sub_title = sub_title_tag.text.strip() if sub_title_tag else ""
+
     image_tag = soup.find("figure", class_="fig-picture")
     image = ""
     if image_tag and image_tag.img:
         image = image_tag.img.get("data-src") or image_tag.img.get("src") or ""
 
-    # Lấy description (nội dung đầu tiên)
     description = ""
     content = soup.find("article", class_="fck_detail")
     if content:
         first_p = content.find("p")
         description = first_p.text.strip() if first_p else ""
 
-    # Lấy author
     author = ""
     author_tag = soup.find("p", class_="author_mail")
     if author_tag:
         author = author_tag.text.strip()
     else:
-        # Thường author nằm ở cuối bài viết
         author_candidates = content.find_all("strong") if content else []
         if author_candidates:
             author = author_candidates[-1].text.strip()
 
-    # Lấy published_at
     published_at = None
     time_tag = soup.find("span", class_="date")
     if time_tag:
         published_text = time_tag.text.strip()
-        # Chuyển về ISO format nếu cần
-        try:
-            published_at = datetime.strptime(published_text, "%d/%m/%Y, %H:%M (GMT+7)")
-        except Exception:
+        published_at = _parse_datetime(published_text)
+        if published_at is None and ", " in published_text:
             try:
-                # Một số bài có tiền tố thứ trong tuần: "Thứ hai, 11/03/2026, 08:22 (GMT+7)"
                 date_part = published_text.split(", ", 1)[1]
-                published_at = datetime.strptime(date_part, "%d/%m/%Y, %H:%M (GMT+7)")
+                published_at = _parse_datetime(date_part)
             except Exception:
                 published_at = None
 
-    # Lấy category
     category = ""
     breadcrumb = soup.find("ul", class_="breadcrumb")
     if breadcrumb:
@@ -88,18 +113,80 @@ async def crawl_news(url: str) -> dict:
         if len(items) > 1:
             category = items[1].text.strip()
 
-        output = {
-            "title": title,
-            "sub_title": sub_title,
-            "image": image,
-            "description": description,
-            "author": author,
-            "published_at": published_at,
-            "category": category,
-        }
+    return {
+        "title": title,
+        "sub_title": sub_title,
+        "image": image,
+        "description": description,
+        "author": author,
+        "published_at": published_at,
+        "category": category,
+    }
 
-        # Không trả về url hoặc source nữa
-        output.pop("url", None)
-        output.pop("source", None)
 
-        return output
+def _parse_generic(soup: BeautifulSoup) -> dict:
+    title = _extract_meta(soup, ["og:title", "twitter:title"]).strip()
+    if not title:
+        h1 = soup.find("h1")
+        title = h1.get_text(strip=True) if h1 else ""
+    if not title:
+        page_title = soup.find("title")
+        title = page_title.get_text(strip=True) if page_title else ""
+
+    sub_title = _extract_meta(soup, ["description", "og:description", "twitter:description"]).strip()
+
+    image = _extract_meta(soup, ["og:image", "twitter:image"]).strip()
+
+    description = ""
+    article = soup.find("article")
+    if article:
+        p = article.find("p")
+        description = p.get_text(strip=True) if p else ""
+    if not description:
+        p = soup.find("p")
+        description = p.get_text(strip=True) if p else ""
+    if not description:
+        description = sub_title
+
+    author = _extract_meta(soup, ["author", "article:author"]).strip()
+    if not author:
+        author_tag = soup.select_one("[rel='author'], .author, .byline")
+        author = author_tag.get_text(strip=True) if author_tag else ""
+
+    published_raw = _extract_meta(
+        soup,
+        [
+            "article:published_time",
+            "date",
+            "pubdate",
+            "publishdate",
+            "datepublished",
+        ],
+    )
+    if not published_raw:
+        time_tag = soup.find("time")
+        if time_tag:
+            published_raw = str(time_tag.get("datetime") or time_tag.get_text(strip=True)).strip()
+    published_at = _parse_datetime(published_raw)
+
+    category = _extract_meta(soup, ["article:section", "section"]).strip()
+
+    return {
+        "title": title,
+        "sub_title": sub_title,
+        "image": image,
+        "description": description,
+        "author": author,
+        "published_at": published_at,
+        "category": category,
+    }
+
+
+async def crawl_news(url: str, parser_type: str = "generic_meta") -> dict:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=REQUEST_HEADERS) as client:
+        response = await _get_with_retry(client, url)
+
+    soup = BeautifulSoup(response.content, "html.parser")
+    if parser_type == "vnexpress":
+        return _parse_vnexpress(soup)
+    return _parse_generic(soup)

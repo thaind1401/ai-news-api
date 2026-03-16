@@ -29,7 +29,10 @@ def list_signals(
     to_date: Optional[datetime] = None,
     sort: str = "newest",
 ) -> Tuple[Sequence[Signal], int]:
-    query = db.query(Signal)
+    query = db.query(Signal).filter(
+        Signal.signal_status == "active",
+        Signal.visibility == "public",
+    )
 
     if source:
         query = query.join(Source).filter(Source.name.ilike(source.strip()))
@@ -90,7 +93,11 @@ def get_signal_by_id(db: Session, signal_id: int) -> Optional[Signal]:
             joinedload(Signal.primary_topic),
             joinedload(Signal.ai_enrichment),
         )
-        .filter(Signal.id == signal_id)
+        .filter(
+            Signal.id == signal_id,
+            Signal.signal_status == "active",
+            Signal.visibility == "public",
+        )
         .first()
     )
 
@@ -115,7 +122,12 @@ def list_trending_signals(db: Session, limit: int = 10, within_hours: int = 24) 
             joinedload(Signal.primary_topic),
             joinedload(Signal.ai_enrichment),
         )
-        .filter(Signal.published_at.isnot(None), Signal.published_at >= since)
+        .filter(
+            Signal.signal_status == "active",
+            Signal.visibility == "public",
+            Signal.published_at.isnot(None),
+            Signal.published_at >= since,
+        )
         .order_by(desc(Signal.published_at), desc(Signal.id))
         .limit(limit)
         .all()
@@ -131,6 +143,10 @@ def list_trending_signals(db: Session, limit: int = 10, within_hours: int = 24) 
             joinedload(Signal.company),
             joinedload(Signal.primary_topic),
             joinedload(Signal.ai_enrichment),
+        )
+        .filter(
+            Signal.signal_status == "active",
+            Signal.visibility == "public",
         )
         .order_by(desc(Signal.published_at), desc(Signal.id))
         .limit(limit)

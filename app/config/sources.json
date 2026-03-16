@@ -1,0 +1,426 @@
+{
+    "sources": [
+        {
+            "name": "vnexpress",
+            "enabled": true,
+            "source_type": "news_site",
+            "base_url": "https://vnexpress.net",
+            "ingest_method": "html",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "vnexpress",
+            "discovery": {
+                "type": "homepage_css",
+                "url": "https://vnexpress.net/",
+                "selector": "h3.title-news a[href^='https://vnexpress.net/']"
+            }
+        },
+        {
+            "name": "openai_blog",
+            "enabled": false,
+            "source_type": "official_blog",
+            "base_url": "https://openai.com",
+            "ingest_method": "rss",
+            "risk_level": "A",
+            "terms_reviewed": true,
+            "robots_reviewed": true,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "paused",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://openai.com/blog/rss.xml"
+            }
+        },
+        {
+            "name": "anthropic_news",
+            "enabled": true,
+            "source_type": "official_blog",
+            "base_url": "https://www.anthropic.com",
+            "ingest_method": "html",
+            "risk_level": "A",
+            "terms_reviewed": true,
+            "robots_reviewed": true,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "homepage_css",
+                "url": "https://www.anthropic.com/news",
+                "selector": "a[href^='/news/']"
+            }
+        },
+        {
+            "name": "cloudflare_blog",
+            "enabled": true,
+            "source_type": "official_blog",
+            "base_url": "https://blog.cloudflare.com",
+            "ingest_method": "rss",
+            "risk_level": "A",
+            "terms_reviewed": true,
+            "robots_reviewed": true,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://blog.cloudflare.com/rss/"
+            }
+        },
+        {
+            "name": "google_ai_blog",
+            "enabled": true,
+            "source_type": "official_blog",
+            "base_url": "https://blog.google/technology/ai",
+            "ingest_method": "rss",
+            "risk_level": "A",
+            "terms_reviewed": true,
+            "robots_reviewed": true,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://blog.google/technology/ai/rss/"
+            }
+        },
+        {
+            "name": "microsoft_research",
+            "enabled": true,
+            "source_type": "official_blog",
+            "base_url": "https://www.microsoft.com/en-us/research",
+            "ingest_method": "rss",
+            "risk_level": "A",
+            "terms_reviewed": true,
+            "robots_reviewed": true,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://www.microsoft.com/en-us/research/feed/"
+            }
+        },
+        {
+            "name": "techcrunch_ai",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://techcrunch.com",
+            "ingest_method": "rss",
+            "risk_level": "A",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://techcrunch.com/tag/artificial-intelligence/feed/"
+            }
+        },
+        {
+            "name": "the_verge",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://www.theverge.com",
+            "ingest_method": "rss",
+            "risk_level": "A",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://www.theverge.com/rss/index.xml"
+            }
+        },
+        {
+            "name": "wired",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://www.wired.com",
+            "ingest_method": "rss",
+            "risk_level": "A",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://www.wired.com/feed/rss"
+            }
+        },
+        {
+            "name": "reuters_technology",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://www.reuters.com",
+            "ingest_method": "rss",
+            "risk_level": "A",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 8,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://www.reutersagency.com/feed/?best-topics=technology"
+            }
+        },
+        {
+            "name": "vnexpress_rss",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://vnexpress.net",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "vnexpress",
+            "discovery": {
+                "type": "rss",
+                "url": "https://vnexpress.net/rss/tin-moi-nhat.rss"
+            }
+        },
+        {
+            "name": "cafef",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://cafef.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://cafef.vn/rss/tin-moi-nhat.rss"
+            }
+        },
+        {
+            "name": "vietnamnet",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://vietnamnet.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://vietnamnet.vn/rss/home.rss"
+            }
+        },
+        {
+            "name": "tuoitre",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://tuoitre.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://tuoitre.vn/rss/tin-moi-nhat.rss"
+            }
+        },
+        {
+            "name": "dantri",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://dantri.com.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://dantri.com.vn/rss/home.rss"
+            }
+        },
+        {
+            "name": "ictnews",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://ictnews.vietnamnet.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://ictnews.vietnamnet.vn/rss/home.rss"
+            }
+        },
+        {
+            "name": "baodautu",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://baodautu.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://baodautu.vn/rss/home.rss"
+            }
+        },
+        {
+            "name": "zingnews",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://zingnews.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://zingnews.vn/rss.html"
+            }
+        },
+        {
+            "name": "nhipcaudautu",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://nhipcaudautu.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://nhipcaudautu.vn/rss/home.rss"
+            }
+        },
+        {
+            "name": "congthuong",
+            "enabled": false,
+            "source_type": "news_site",
+            "base_url": "https://congthuong.vn",
+            "ingest_method": "rss",
+            "risk_level": "B",
+            "terms_reviewed": false,
+            "robots_reviewed": false,
+            "auth_required": false,
+            "paywall": false,
+            "store_full_text": false,
+            "status": "active",
+            "owner": "crawler",
+            "max_links": 10,
+            "detail_parser": "generic_meta",
+            "discovery": {
+                "type": "rss",
+                "url": "https://congthuong.vn/rss/home.rss"
+            }
+        }
+    ]
+}

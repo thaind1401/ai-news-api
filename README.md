@@ -57,16 +57,53 @@ make restart
 ## Luồng dữ liệu hiện tại
 
 1. `run_crawler()` chạy khi startup và mỗi 3 phút.
-2. Crawl link mới từ VnExpress.
-3. Parse nội dung và ghi vào schema v2:
+2. Crawl link mới từ các nguồn đang `enabled` trong `app/config/sources.json`.
+3. Parse nội dung và ghi **phase 1** vào schema v2:
    - `sources`
    - `raw_items`
-   - `signals`
-   - `signal_ai_enrichments`
+  - `signals` (trạng thái chờ AI: `hidden/internal`)
+4. Chạy **phase 2 AI enrichment**:
+  - tạo/cập nhật `signal_ai_enrichments`
+  - publish signal sang `active/public`
 4. Dedupe baseline:
    - theo `source_url`
    - theo `title similarity`
    - theo `company + event_type` (heuristic)
+
+## Cấu hình nguồn crawl
+
+File cấu hình: `app/config/sources.json`
+
+- `enabled: true/false` để bật/tắt nguồn.
+- `discovery.type` hỗ trợ:
+  - `homepage_css`: lấy link bằng CSS selector từ trang chủ.
+  - `rss`: lấy link từ RSS/Atom feed.
+- `detail_parser` hỗ trợ:
+  - `vnexpress`: parser tối ưu cho VnExpress.
+  - `generic_meta`: parser generic cho đa số site dùng meta tags.
+
+Ví dụ bật một nguồn:
+
+```json
+{
+  "name": "openai_blog",
+  "enabled": true,
+  "source_type": "official_blog",
+  "base_url": "https://openai.com",
+  "ingest_method": "rss",
+  "detail_parser": "generic_meta",
+  "discovery": {
+    "type": "rss",
+    "url": "https://openai.com/blog/rss.xml"
+  }
+}
+```
+
+Tuỳ chọn đổi đường dẫn file config bằng biến môi trường:
+
+```bash
+export SOURCES_CONFIG_PATH=/path/to/your/sources.json
+```
 
 ## API
 

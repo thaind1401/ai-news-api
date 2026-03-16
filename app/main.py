@@ -22,7 +22,7 @@ async def lifespan(_: FastAPI):
         run_crawler,
         "interval",
         minutes=3,
-        id="vnexpress_crawler",
+        id="signals_crawler",
         max_instances=1,
         coalesce=True,
         replace_existing=True,

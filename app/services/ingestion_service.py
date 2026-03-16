@@ -5,14 +5,16 @@ from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Optional, Tuple
 
-from sqlalchemy import desc
-from sqlalchemy.orm import Session
+from sqlalchemy import desc, or_
+from sqlalchemy.orm import Session, joinedload
 
 from app.database.models import Company, RawItem, Signal, SignalAIEnrichment, Source, Topic
 
 DEFAULT_EVENT_TYPE = "market_move"
 TITLE_SIMILARITY_THRESHOLD = 0.93
 COMPANY_EVENT_SIMILARITY_THRESHOLD = 0.88
+DEFAULT_AI_MODEL = "rule-based-v1"
+DEFAULT_AI_PROMPT_VERSION = "baseline-v2"
 
 
 def slugify(text: str) -> str:
@@ -74,24 +76,49 @@ def guess_company_name(news_detail: dict) -> Optional[str]:
     return candidate[:120]
 
 
-def get_or_create_source(db: Session, name: str, base_url: str, source_type: str = "news_site") -> Source:
+def get_or_create_source(
+    db: Session,
+    name: str,
+    base_url: str,
+    source_type: str = "news_site",
+    ingest_method: str = "html",
+    risk_level: str = "B",
+    terms_reviewed: bool = False,
+    robots_reviewed: bool = False,
+    auth_required: bool = False,
+    paywall: bool = False,
+    store_full_text: bool = False,
+    status: str = "active",
+    owner: str = "crawler",
+) -> Source:
     source = db.query(Source).filter(Source.name == name).first()
     if source:
+        source.base_url = base_url
+        source.source_type = source_type
+        source.ingest_method = ingest_method
+        source.risk_level = risk_level
+        source.terms_reviewed = terms_reviewed
+        source.robots_reviewed = robots_reviewed
+        source.auth_required = auth_required
+        source.paywall = paywall
+        source.store_full_text = store_full_text
+        source.status = status
+        source.owner = owner
         return source
 
     source = Source(
         name=name,
         source_type=source_type,
         base_url=base_url,
-        ingest_method="html",
-        risk_level="A",
-        terms_reviewed=True,
-        robots_reviewed=True,
-        auth_required=False,
-        paywall=False,
-        store_full_text=False,
-        status="active",
-        owner="crawler",
+        ingest_method=ingest_method,
+        risk_level=risk_level,
+        terms_reviewed=terms_reviewed,
+        robots_reviewed=robots_reviewed,
+        auth_required=auth_required,
+        paywall=paywall,
+        store_full_text=store_full_text,
+        status=status,
+        owner=owner,
     )
     db.add(source)
     db.flush()
@@ -295,8 +322,8 @@ def upsert_signal_from_news_detail(
                 primary_topic_id=topic.id if topic else None,
                 event_type=DEFAULT_EVENT_TYPE,
                 dedup_key=dedup_key,
-                signal_status="active",
-                visibility="public",
+                signal_status="hidden",
+                visibility="internal",
             )
             db.add(signal)
             db.flush()
@@ -311,47 +338,106 @@ def upsert_signal_from_news_detail(
         signal.company_id = company.id if company else None
         signal.primary_topic_id = topic.id if topic else None
         signal.event_type = DEFAULT_EVENT_TYPE
-        signal.signal_status = "active"
-        signal.visibility = "public"
+        signal.signal_status = "hidden"
+        signal.visibility = "internal"
 
+    return raw_created, signal_created, False, signal_skipped_as_duplicate
+
+
+def _upsert_rule_based_enrichment(db: Session, signal: Signal, payload: dict) -> bool:
+    sub_title = payload.get("sub_title") or ""
+    category = payload.get("category") or ""
+    company_name = signal.company.name if signal.company else None
+
+    summary = build_summary(payload)
+    enrichment = (
+        db.query(SignalAIEnrichment)
+        .filter(SignalAIEnrichment.signal_id == signal.id)
+        .first()
+    )
     enrichment_created = False
-    if signal:
-        summary = build_summary(news_detail)
-        enrichment = (
-            db.query(SignalAIEnrichment)
-            .filter(SignalAIEnrichment.signal_id == signal.id)
-            .first()
+    if not enrichment:
+        enrichment = SignalAIEnrichment(
+            signal_id=signal.id,
+            summary_one_line=summary,
+            summary_bullets=[sub_title] if sub_title else [],
+            why_it_matters=summary,
+            tags=[category] if category else [],
+            importance_score=3,
+            confidence_score=1,
+            company_name_extracted=company_name,
+            topic_extracted=category,
+            event_type_extracted=signal.event_type,
+            model_name=DEFAULT_AI_MODEL,
+            prompt_version=DEFAULT_AI_PROMPT_VERSION,
+            enrichment_status="done",
+            error_message=None,
         )
-        if not enrichment:
-            enrichment = SignalAIEnrichment(
-                signal_id=signal.id,
-                summary_one_line=summary,
-                summary_bullets=[sub_title] if sub_title else [],
-                why_it_matters=summary,
-                tags=[category] if category else [],
-                importance_score=3,
-                confidence_score=1,
-                company_name_extracted=company.name if company else None,
-                topic_extracted=category,
-                event_type_extracted=DEFAULT_EVENT_TYPE,
-                model_name="rule-based-v1",
-                prompt_version="baseline-v2",
-                enrichment_status="done",
-            )
-            db.add(enrichment)
-            enrichment_created = True
-        else:
-            enrichment.summary_one_line = summary
-            enrichment.summary_bullets = [sub_title] if sub_title else []
-            enrichment.why_it_matters = summary
-            enrichment.tags = [category] if category else []
-            enrichment.importance_score = 3
-            enrichment.confidence_score = 1
-            enrichment.company_name_extracted = company.name if company else None
-            enrichment.topic_extracted = category
-            enrichment.event_type_extracted = DEFAULT_EVENT_TYPE
-            enrichment.model_name = "rule-based-v1"
-            enrichment.prompt_version = "baseline-v2"
-            enrichment.enrichment_status = "done"
+        db.add(enrichment)
+        enrichment_created = True
+    else:
+        enrichment.summary_one_line = summary
+        enrichment.summary_bullets = [sub_title] if sub_title else []
+        enrichment.why_it_matters = summary
+        enrichment.tags = [category] if category else []
+        enrichment.importance_score = 3
+        enrichment.confidence_score = 1
+        enrichment.company_name_extracted = company_name
+        enrichment.topic_extracted = category
+        enrichment.event_type_extracted = signal.event_type
+        enrichment.model_name = DEFAULT_AI_MODEL
+        enrichment.prompt_version = DEFAULT_AI_PROMPT_VERSION
+        enrichment.enrichment_status = "done"
+        enrichment.error_message = None
 
-    return raw_created, signal_created, enrichment_created, signal_skipped_as_duplicate
+    signal.signal_status = "active"
+    signal.visibility = "public"
+    return enrichment_created
+
+
+def process_pending_signal_enrichments(db: Session, limit: int = 200) -> tuple[int, int]:
+    pending_signals = (
+        db.query(Signal)
+        .options(
+            joinedload(Signal.raw_item),
+            joinedload(Signal.company),
+            joinedload(Signal.ai_enrichment),
+        )
+        .filter(
+            or_(
+                Signal.signal_status != "active",
+                Signal.visibility != "public",
+            )
+        )
+        .order_by(desc(Signal.crawl_time), desc(Signal.id))
+        .limit(limit)
+        .all()
+    )
+
+    enriched_count = 0
+    failed_count = 0
+
+    for signal in pending_signals:
+        payload = (signal.raw_item.raw_payload if signal.raw_item else None) or {}
+        try:
+            _upsert_rule_based_enrichment(db=db, signal=signal, payload=payload)
+            enriched_count += 1
+        except Exception as exc:
+            enrichment = signal.ai_enrichment
+            if not enrichment:
+                enrichment = SignalAIEnrichment(
+                    signal_id=signal.id,
+                    model_name=DEFAULT_AI_MODEL,
+                    prompt_version=DEFAULT_AI_PROMPT_VERSION,
+                    enrichment_status="failed",
+                    error_message=str(exc),
+                )
+                db.add(enrichment)
+            else:
+                enrichment.model_name = DEFAULT_AI_MODEL
+                enrichment.prompt_version = DEFAULT_AI_PROMPT_VERSION
+                enrichment.enrichment_status = "failed"
+                enrichment.error_message = str(exc)
+            failed_count += 1
+
+    return enriched_count, failed_count

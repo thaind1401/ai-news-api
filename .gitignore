@@ -77,5 +77,4 @@ Thumbs.db
 *.swp
 *.tmp
 
-# Ignore migration SQL dumps
 scripts/*.sql

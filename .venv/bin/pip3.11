@@ -1,4 +1,4 @@
-#!/Users/thainguyen/Data/AI/ai-news-api/.venv/bin/python3.11
+#!/Users/thai.nguyen/MyProjects/ai-news-api/.venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

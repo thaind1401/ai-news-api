@@ -2,10 +2,11 @@ import httpx
 import asyncio
 import logging
 import json
+
 from bs4 import BeautifulSoup
-from app.services.news_service import create_news
+
+from app.services.ingestion_service import get_or_create_source, upsert_signal_from_news_detail
 from app.database.db import SessionLocal
-from app.database.models import News
 from app.crawlers.news_crawler import crawl_news
 
 logger = logging.getLogger(__name__)
@@ -34,13 +35,21 @@ async def run_crawler():
     links = await get_latest_vnexpress_links(10)
     results = await asyncio.gather(*(crawl_news(link) for link in links), return_exceptions=True)
     saved_items = []
+    stats = {
+        "raw_items_created": 0,
+        "signals_created": 0,
+        "enrichments_created": 0,
+        "duplicates_skipped": 0,
+    }
 
     db = SessionLocal()
     try:
-        # Chỉ xóa 10 tin cũ nhất, không xóa toàn bảng
-        old_news = db.query(News).order_by(News.published_at.asc(), News.id.asc()).limit(10).all()
-        for old in old_news:
-            db.delete(old)
+        source = get_or_create_source(
+            db=db,
+            name="vnexpress",
+            base_url="https://vnexpress.net",
+            source_type="news_site",
+        )
 
         for i, result in enumerate(results):
             if isinstance(result, Exception) or result is None:
@@ -51,27 +60,29 @@ async def run_crawler():
             if not news_detail.get("title"):
                 continue
 
-            create_news(
+            raw_created, signal_created, enrichment_created, skipped_duplicate = upsert_signal_from_news_detail(
                 db=db,
-                title=news_detail.get("title", ""),
-                content=news_detail.get("description", ""),
-                published_at=news_detail.get("published_at", None),
-                sub_title=news_detail.get("sub_title", ""),
-                image=news_detail.get("image", ""),
-                author=news_detail.get("author", ""),
-                category=news_detail.get("category", ""),
-                auto_commit=False,
+                source=source,
+                source_url=links[i],
+                news_detail=news_detail,
             )
+            stats["raw_items_created"] += 1 if raw_created else 0
+            stats["signals_created"] += 1 if signal_created else 0
+            stats["enrichments_created"] += 1 if enrichment_created else 0
+            stats["duplicates_skipped"] += 1 if skipped_duplicate else 0
+
             saved_items.append(
                 {
                     "title": news_detail.get("title", ""),
                     "published_at": str(news_detail.get("published_at", "")),
                     "category": news_detail.get("category", ""),
+                    "source_url": links[i],
                 }
             )
 
         db.commit()
         logger.info("Crawler saved %s items", len(saved_items))
+        logger.info("Crawler stats: %s", json.dumps(stats, ensure_ascii=False))
         logger.info("Crawler data: %s", json.dumps(saved_items, ensure_ascii=False))
     except Exception:
         db.rollback()

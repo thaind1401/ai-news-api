@@ -1,7 +1,7 @@
 from app.database.db import Base, engine
 from app.database import models
 
-# Tạo các bảng trong database (chỉ cần chạy 1 lần khi khởi tạo/migrate)
+# Tạo các bảng trong database (chỉ cần chạy 1 lần khi khởi tạo)
 def init_db():
     Base.metadata.create_all(bind=engine)
 

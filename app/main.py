@@ -1,9 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from app.crawlers.crawler import run_crawler
-from app.routers import news, articles, chat
+from app.routers import chat, signals
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +34,30 @@ async def lifespan(_: FastAPI):
         scheduler.shutdown(wait=False)
 
 app = FastAPI(lifespan=lifespan)
-app.include_router(news.router)
-app.include_router(articles.router)
+app.include_router(signals.router)
 app.include_router(chat.router)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(_: Request, exc: HTTPException):
+    if isinstance(exc.detail, dict) and exc.detail.get("code") and exc.detail.get("message"):
+        return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": "HTTP_ERROR", "message": str(exc.detail)}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Invalid request parameters.",
+                "details": {"items": exc.errors()},
+            }
+        },
+    )

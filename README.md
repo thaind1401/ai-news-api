@@ -200,7 +200,7 @@ curl http://localhost:8000/api/v1/companies
 ### Chat (stub)
 
 ```bash
-curl -X POST http://localhost:8000/chat \
+curl -X POST http://localhost:8000/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"hello"}'
 ```
